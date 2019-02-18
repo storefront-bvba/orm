@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Doctrine\Tests\ORM\Functional;
 
 use DateTime;
+use Doctrine\Common\Collections\Criteria;
 use Doctrine\Tests\Models\Routing\RoutingLeg;
 use Doctrine\Tests\Models\Routing\RoutingLocation;
 use Doctrine\Tests\Models\Routing\RoutingRoute;
@@ -98,6 +99,47 @@ class OrderedCollectionTest extends OrmFunctionalTestCase
         self::assertCount(2, $route->bookings);
         self::assertEquals('Benjamin', $route->bookings[0]->getPassengerName());
         self::assertEquals('Guilherme', $route->bookings[1]->getPassengerName());
+    }
+
+    public function testLazyOneToManyCollectionIsRetrievedWithOrderByClauseAndFiltered() : void
+    {
+        $route = new RoutingRoute();
+
+        $this->em->persist($route);
+        $this->em->flush();
+        $routeId = $route->id;
+
+        $booking1                = new RoutingRouteBooking();
+        $booking1->passengerName = 'Guilherme';
+        $booking2                = new RoutingRouteBooking();
+        $booking2->passengerName = 'Benjamin';
+        $booking3                = new RoutingRouteBooking();
+        $booking3->passengerName = 'Jos';
+
+        $route->bookings[] = $booking1;
+        $booking1->route   = $route;
+        $route->bookings[] = $booking2;
+        $booking2->route   = $route;
+        $route->bookings[] = $booking3;
+        $booking3->route   = $route;
+
+        $this->em->persist($booking1);
+        $this->em->persist($booking2);
+        $this->em->persist($booking3);
+
+        $this->em->flush();
+        $this->em->clear();
+
+        $route = $this->em->find(RoutingRoute::class, $routeId);
+
+        // following I would've added in the getBookings method.
+        $criteria = Criteria::create()
+                            ->where(Criteria::expr()->in('passengerName',['Guilherme','Benjamin']));
+        $bookings = $route->bookings->matching($criteria);
+
+        self::assertCount(2, $bookings);
+        self::assertEquals('Benjamin', $bookings[0]->getPassengerName());
+        self::assertEquals('Guilherme', $bookings[1]->getPassengerName());
     }
 
     public function testOrderedResultFromDqlQuery() : void
